@@ -29,9 +29,22 @@ async function attemptDefaultLoad() {
     const text = await response.text();
     loadChartFromCsv(text, "data.csv");
   } catch (error) {
-    statusEl.textContent = "Open a CSV file to draw the chart. Automatic loading works when the page is served over HTTP.";
+    statusEl.textContent = "Couldn't load data.csv automatically. Trying to open a CSV file picker.";
     renderEmptyState("No data loaded");
+    promptForCsvOnLoad();
   }
+}
+
+function promptForCsvOnLoad() {
+  // Browsers may block this without a user gesture, so keep a clear fallback message.
+  requestAnimationFrame(() => {
+    try {
+      fileInput.click();
+      statusEl.textContent = "Choose a CSV file to draw the chart if the picker opened. If it did not, use Open CSV.";
+    } catch (error) {
+      statusEl.textContent = "Open a CSV file to draw the chart. Automatic loading works when the page is served over HTTP.";
+    }
+  });
 }
 
 function loadChartFromCsv(csvText, sourceName) {
