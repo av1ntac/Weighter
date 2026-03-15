@@ -1,0 +1,145 @@
+:root {
+  --bg: #f4efe7;
+  --panel: #fffaf3;
+  --panel-border: #e2d6c5;
+  --text: #30261d;
+  --muted: #776657;
+  --accent: #c05f2f;
+  --grid: #e7ddcf;
+  --shadow: 0 20px 60px rgba(48, 38, 29, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(192, 95, 47, 0.16), transparent 28%),
+    linear-gradient(180deg, #f8f3eb 0%, var(--bg) 100%);
+}
+
+.page {
+  width: min(1120px, calc(100% - 32px));
+  margin: 32px auto;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 0.95;
+}
+
+.lede {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.status {
+  margin-bottom: 18px;
+  color: var(--muted);
+}
+
+.chart-card {
+  position: relative;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(192, 95, 47, 0.06), transparent 24%),
+    #fffdf9;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tooltip {
+  position: absolute;
+  min-width: 160px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(48, 38, 29, 0.94);
+  color: #fffdf8;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  box-shadow: 0 10px 25px rgba(48, 38, 29, 0.24);
+  font-size: 0.95rem;
+}
+
+.tooltip strong,
+.tooltip span {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .page {
+    width: min(100% - 20px, 1120px);
+    margin: 10px auto;
+  }
+
+  .panel {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .panel__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .upload {
+    width: 100%;
+  }
+}
