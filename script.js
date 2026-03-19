@@ -1,137 +1,40 @@
 const chart = document.getElementById("chart");
 const tooltip = document.getElementById("tooltip");
 const statusEl = document.getElementById("status");
-const fileInput = document.getElementById("file-input");
 
 const WIDTH = 960;
 const HEIGHT = 520;
 const MARGIN = { top: 32, right: 28, bottom: 56, left: 72 };
 
-fileInput.addEventListener("change", async (event) => {
-  const [file] = event.target.files || [];
-  if (!file) {
-    return;
-  }
+loadChartFromApi();
 
-  const text = await file.text();
-  loadChartFromCsv(text, file.name);
-});
-
-attemptDefaultLoad();
-
-async function attemptDefaultLoad() {
+async function loadChartFromApi() {
   try {
-    const response = await fetch("./data.csv", { cache: "no-store" });
+    const response = await fetch("/api/weights", { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const text = await response.text();
-    loadChartFromCsv(text, "data.csv");
-  } catch (error) {
-    statusEl.textContent = "Couldn't load data.csv automatically. Trying to open a CSV file picker.";
-    renderEmptyState("No data loaded");
-    promptForCsvOnLoad();
-  }
-}
-
-function promptForCsvOnLoad() {
-  // Browsers may block this without a user gesture, so keep a clear fallback message.
-  requestAnimationFrame(() => {
-    try {
-      fileInput.click();
-      statusEl.textContent = "Choose a CSV file to draw the chart if the picker opened. If it did not, use Open CSV.";
-    } catch (error) {
-      statusEl.textContent = "Open a CSV file to draw the chart. Automatic loading works when the page is served over HTTP.";
-    }
-  });
-}
-
-function loadChartFromCsv(csvText, sourceName) {
-  try {
-    const rows = parseCsv(csvText);
-    const points = rows
+    const payload = await response.json();
+    const points = (payload.items || [])
       .map((row) => normalizeRow(row))
       .filter(Boolean)
       .sort((a, b) => a.timestamp - b.timestamp);
 
     if (!points.length) {
-      throw new Error("No valid rows found in CSV.");
+      throw new Error("No valid rows returned by the API.");
     }
 
-    statusEl.textContent = `Loaded ${points.length} records from ${sourceName}.`;
+    statusEl.textContent = `Loaded ${points.length} records from /api/weights.`;
     renderChart(points);
   } catch (error) {
-    statusEl.textContent = error.message;
-    renderEmptyState("Unable to draw chart");
+    statusEl.textContent = `Unable to load API data: ${error.message}`;
+    renderEmptyState("No data loaded");
   }
-}
-
-function parseCsv(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length < 2) {
-    throw new Error("CSV must include a header row and at least one data row.");
-  }
-
-  const headers = splitCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
-  const requiredHeaders = ["date", "time", "weight"];
-
-  for (const required of requiredHeaders) {
-    if (!headers.includes(required)) {
-      throw new Error(`Missing required column: ${required}`);
-    }
-  }
-
-  return lines.slice(1).map((line) => {
-    const values = splitCsvLine(line);
-    const row = {};
-
-    headers.forEach((header, index) => {
-      row[header] = (values[index] || "").trim();
-    });
-
-    return row;
-  });
-}
-
-function splitCsvLine(line) {
-  const values = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      values.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  values.push(current);
-  return values;
 }
 
 function normalizeRow(row) {
-  const timestamp = new Date(`${row.date}T${row.time}`);
+  const timestamp = new Date(row.timestamp || `${row.date}T${row.time}`);
   const weight = Number.parseFloat(row.weight);
 
   if (Number.isNaN(timestamp.getTime()) || Number.isNaN(weight)) {

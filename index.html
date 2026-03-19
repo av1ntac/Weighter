@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weight Tracker</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <main class="page">
@@ -13,20 +13,16 @@
         <div>
           <p class="eyebrow">Weight Tracker</p>
           <h1>Weight Over Time</h1>
-          <p class="lede">Load a CSV with columns: <code>date</code>, <code>time</code>, <code>weight</code>.</p>
+          <p class="lede">Data is loaded from <code>data.csv</code> through the FastAPI endpoint <code>/api/weights</code>.</p>
         </div>
-        <label class="upload">
-          <span>Open CSV</span>
-          <input id="file-input" type="file" accept=".csv,text/csv">
-        </label>
       </div>
-      <div id="status" class="status">Trying to load <code>data.csv</code>...</div>
+      <div id="status" class="status">Loading records from <code>/api/weights</code>...</div>
       <div class="chart-card">
         <svg id="chart" class="chart" viewBox="0 0 960 520" role="img" aria-label="Line chart of weight by date"></svg>
         <div id="tooltip" class="tooltip" hidden></div>
       </div>
     </section>
   </main>
-  <script src="script.js"></script>
+  <script src="/static/script.js"></script>
 </body>
 </html>
