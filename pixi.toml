@@ -1,0 +1,20 @@
+[project]
+name = "weighter"
+version = "0.1.0"
+description = "Weight tracker app"
+authors = ["Codex"]
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64"]
+
+[dependencies]
+python = "3.11.*"
+pip = "*"
+
+[pypi-dependencies]
+fastapi = "==0.116.1"
+uvicorn = { version = "==0.35.0", extras = ["standard"] }
+boto3 = "==1.39.17"
+mangum = "==0.19.0"
+
+[tasks]
+start = "uvicorn main:app --reload --host 127.0.0.1 --port 8010"
