@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Weight tracker app"
 authors = ["Codex"]
 channels = ["conda-forge"]
-platforms = ["win-64", "linux-64"]
+platforms = ["linux-64"]
 
 [dependencies]
 python = "3.11.*"
@@ -18,3 +18,4 @@ mangum = "==0.19.0"
 
 [tasks]
 start = "uvicorn main:app --reload --host 127.0.0.1 --port 8010"
+package-lambda = "bash scripts/package_lambda.sh"
