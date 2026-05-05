@@ -2,11 +2,32 @@
 
 This project uses a split AWS deployment:
 
-- S3 website bucket: hosts `index.html` and the static frontend assets.
-- Lambda Function URL: runs the FastAPI backend from `main.py`.
+- AWS Amplify hosting: serves the static frontend from `frontend/`. Deploys automatically when `frontend/` changes are pushed to `main`.
+- Lambda Function URL: runs the FastAPI backend from `backend/main.py`, packaged as `main.py` in the Lambda zip.
 - S3 data bucket: stores the CSV files read and written by the backend.
 
+The repo layout is:
+
+- `frontend/`: static HTML, CSS, and JavaScript assets.
+- `backend/`: FastAPI application entrypoint.
+- `data/`: local CSV files used for development or seeding S3.
+
 The commands below are written for Ubuntu/Linux/WSL with `bash`.
+
+## Local development
+
+Run the app from the project root so Python can import `backend.main` and the backend can resolve `frontend/` and `data/` correctly.
+
+Local development defaults to filesystem storage in `data/` when `AWS_STORAGE_BUCKET` is unset:
+
+```bash
+pixi install --locked
+pixi run start
+```
+
+That starts FastAPI on `http://127.0.0.1:8010`, serves `frontend/index.html` at `/`, serves `frontend/static/` at `/static`, and reads or writes CSV files in `data/`.
+
+If you want to test against S3 locally instead, set `AWS_STORAGE_BUCKET` and optionally `AWS_STORAGE_PREFIX` before starting the app.
 
 ## 1. Install local tools
 
@@ -39,7 +60,6 @@ Choose globally unique S3 bucket names before running the commands.
 ```bash
 export AWS_REGION="eu-north-1"
 export DATA_BUCKET="weighter-data-prod"
-export WEB_BUCKET="weighter-web-prod"
 export DATA_PREFIX="weights"
 export FUNCTION_NAME="weighter-api"
 export ROLE_NAME="weighter-lambda-role"
@@ -79,8 +99,8 @@ aws s3api put-bucket-encryption \
 Seed the existing CSV data:
 
 ```bash
-aws s3 cp data.csv "s3://$DATA_BUCKET/$DATA_PREFIX/data.csv"
-aws s3 cp data_cpu.csv "s3://$DATA_BUCKET/$DATA_PREFIX/data_cpu.csv"
+aws s3 cp data/data.csv "s3://$DATA_BUCKET/$DATA_PREFIX/data.csv"
+aws s3 cp data/data_cpu.csv "s3://$DATA_BUCKET/$DATA_PREFIX/data_cpu.csv"
 ```
 
 The app treats `data.csv` as the `default` user. Files named `data_<user>.csv`, such as `data_cpu.csv`, become additional users.
@@ -180,7 +200,7 @@ From the project root:
 bash scripts/package_lambda.sh
 ```
 
-For the split S3 frontend deployment, only `main.py` and Python dependencies are required in `lambda.zip`.
+For the split frontend deployment, the Lambda zip only needs the backend handler module and Python dependencies. Frontend assets stay in `frontend/` and are deployed separately to Amplify or S3.
 
 The packaging script installs Python 3.11 manylinux wheels into `build/` and verifies that the Pydantic compiled extension is present in the zip. That avoids Lambda import errors like:
 
@@ -321,90 +341,29 @@ export API_URL="$(aws lambda get-function-url-config \
 echo "$API_URL"
 ```
 
-## 8. Create the S3 website bucket
+## 8. Configure the frontend for the deployed API
 
-Create the website bucket:
+Edit `frontend/static/config.js` and set the Lambda Function URL obtained in step 7:
 
-```bash
-aws s3api create-bucket \
-  --bucket "$WEB_BUCKET" \
-  --region "$AWS_REGION" \
-  --create-bucket-configuration LocationConstraint="$AWS_REGION"
+```js
+window.WEIGHT_API_BASE_URL = "https://<your-function-url-id>.lambda-url.<region>.on.aws";
 ```
 
-Enable static website hosting:
+The Amplify deployment is triggered automatically by git — no manual upload is needed (see step 9).
+
+## 9. Deploy the frontend via AWS Amplify
+
+The frontend is hosted on AWS Amplify. Amplify watches the `main` branch and redeploys automatically whenever `frontend/` changes are pushed.
+
+To trigger a deployment, commit and push any change to the `frontend/` folder:
 
 ```bash
-aws s3 website "s3://$WEB_BUCKET" \
-  --index-document index.html \
-  --error-document index.html
+git add frontend/
+git commit -m "Update frontend"
+git push origin main
 ```
 
-Allow public website reads:
-
-```bash
-aws s3api put-public-access-block \
-  --bucket "$WEB_BUCKET" \
-  --public-access-block-configuration '{
-    "BlockPublicAcls": false,
-    "IgnorePublicAcls": false,
-    "BlockPublicPolicy": false,
-    "RestrictPublicBuckets": false
-  }'
-```
-
-Create the bucket policy:
-
-```bash
-cat > /tmp/weighter-web-policy.json <<JSON
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::$WEB_BUCKET/*"
-    }
-  ]
-}
-JSON
-
-aws s3api put-bucket-policy \
-  --bucket "$WEB_BUCKET" \
-  --policy file:///tmp/weighter-web-policy.json
-```
-
-## 9. Configure and upload the frontend
-
-Generate `config.js` with the deployed API URL:
-
-```bash
-printf 'window.WEIGHT_API_BASE_URL = "%s";\n' "$API_URL" > config.js
-```
-
-Upload `index.html` to the website root. Upload the other frontend files under `static/` because `index.html` references `/static/styles.css`, `/static/config.js`, and `/static/script.js`.
-
-```bash
-aws s3 cp index.html "s3://$WEB_BUCKET/index.html" \
-  --content-type "text/html; charset=utf-8"
-
-aws s3 cp styles.css "s3://$WEB_BUCKET/static/styles.css" \
-  --content-type "text/css; charset=utf-8"
-
-aws s3 cp config.js "s3://$WEB_BUCKET/static/config.js" \
-  --content-type "application/javascript; charset=utf-8"
-
-aws s3 cp script.js "s3://$WEB_BUCKET/static/script.js" \
-  --content-type "application/javascript; charset=utf-8"
-```
-
-Open the S3 website URL:
-
-```bash
-echo "http://$WEB_BUCKET.s3-website.$AWS_REGION.amazonaws.com"
-```
+Amplify picks up the push and publishes the new build within a minute or two. The live URL is shown in the Amplify console under your app's domain.
 
 ## 10. Test the deployment
 
@@ -429,7 +388,7 @@ Delete an entry by row id:
 curl -X DELETE "$API_URL/api/weights/2?user=default"
 ```
 
-Then open the S3 website URL and confirm that loading, saving, switching users, and deleting all work.
+Then open the Amplify app URL and confirm that loading, saving, switching users, and deleting all work.
 
 ## 11. Redeploy after changes
 
@@ -447,15 +406,12 @@ aws lambda update-function-code \
 Frontend change:
 
 ```bash
-aws s3 cp index.html "s3://$WEB_BUCKET/index.html" \
-  --content-type "text/html; charset=utf-8"
-aws s3 cp styles.css "s3://$WEB_BUCKET/static/styles.css" \
-  --content-type "text/css; charset=utf-8"
-aws s3 cp config.js "s3://$WEB_BUCKET/static/config.js" \
-  --content-type "application/javascript; charset=utf-8"
-aws s3 cp script.js "s3://$WEB_BUCKET/static/script.js" \
-  --content-type "application/javascript; charset=utf-8"
+git add frontend/
+git commit -m "Update frontend"
+git push origin main
 ```
+
+Amplify detects the push to `main` and redeploys automatically.
 
 ## Notes
 

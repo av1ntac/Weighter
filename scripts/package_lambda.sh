@@ -39,11 +39,7 @@ mkdir -p build
   --target build \
   -r requirements.txt
 
-cp main.py build/
-cp index.html build/
-cp styles.css build/
-cp script.js build/
-cp config.js build/
+cp backend/main.py build/main.py
 
 (
   cd build
@@ -58,12 +54,5 @@ if ! grep -Eq 'pydantic_core/_pydantic_core.*\.so' "$ZIP_LISTING"; then
   echo "lambda.zip is missing pydantic_core/_pydantic_core*.so" >&2
   exit 1
 fi
-
-for required_file in index.html styles.css script.js config.js; do
-  if ! grep -Eq "(^|[[:space:]])${required_file}$" "$ZIP_LISTING"; then
-    echo "lambda.zip is missing ${required_file}" >&2
-    exit 1
-  fi
-done
 
 echo "Created lambda.zip for Python $PYTHON_VERSION on Lambda $LAMBDA_ARCH using $PIP_PLATFORM."

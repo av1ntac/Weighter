@@ -17,7 +17,10 @@ from pydantic import BaseModel, Field
 
 
 BASE_DIR = Path(__file__).resolve().parent
-LOCAL_CSV_PATH = BASE_DIR / "data.csv"
+REPO_ROOT = BASE_DIR.parent
+FRONTEND_DIR = REPO_ROOT / "frontend"
+STATIC_DIR = FRONTEND_DIR / "static"
+DATA_DIR = REPO_ROOT / "data"
 USER_FILE_PATTERN = re.compile(r"^data_(?P<user>[a-z0-9_-]+)\.csv$")
 BACKUP_FILE_PATTERN = re.compile(r"^data_(?P<user>[a-z0-9_-]+)_(?P<date>\d{8})\.csv$")
 CSV_FIELDNAMES = ["date", "time", "weight", "desired_weights"]
@@ -92,7 +95,7 @@ class StorageBackend:
 
 class LocalStorageBackend(StorageBackend):
     def _path(self, key: str) -> Path:
-        return BASE_DIR / key
+        return DATA_DIR / key
 
     def exists(self, key: str) -> bool:
         return self._path(key).exists()
@@ -101,15 +104,18 @@ class LocalStorageBackend(StorageBackend):
         return self._path(key).read_text(encoding="utf-8")
 
     def write_text(self, key: str, content: str) -> None:
-        self._path(key).write_text(content, encoding="utf-8", newline="")
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8", newline="")
 
     def copy(self, source_key: str, destination_key: str) -> None:
         source_path = self._path(source_key)
         destination_path = self._path(destination_key)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
         destination_path.write_bytes(source_path.read_bytes())
 
     def list_csv_names(self) -> list[str]:
-        return [path.name for path in BASE_DIR.glob("*.csv")]
+        return [path.name for path in DATA_DIR.glob("*.csv")]
 
 
 class S3StorageBackend(StorageBackend):
@@ -192,7 +198,8 @@ else:
 
 
 app = FastAPI(title="Weight Tracker API")
-app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
+if not USE_S3_STORAGE:
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 class WeightEntry(BaseModel):
@@ -389,9 +396,10 @@ def remove_weight(row_id: int, user: str = Query(default="default")) -> dict[str
     return delete_weight(row_id, user)
 
 
-@app.get("/")
-def get_index() -> FileResponse:
-    return FileResponse(BASE_DIR / "index.html")
+if not USE_S3_STORAGE:
+    @app.get("/")
+    def get_index() -> FileResponse:
+        return FileResponse(FRONTEND_DIR / "index.html")
 
 
 handler = Mangum(app)
