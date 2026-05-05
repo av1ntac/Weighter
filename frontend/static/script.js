@@ -12,6 +12,17 @@ const WIDTH = 960;
 const HEIGHT = 520;
 const MARGIN = { top: 32, right: 28, bottom: 56, left: 72 };
 const USER_STORAGE_KEY = "weight-tracker-user";
+const ZOOM_FACTOR = 0.33;
+
+let zoomStart = null;
+let zoomEnd = null;
+let allRows = [];
+let allDesiredWeights = [];
+
+let dragStartX = null;
+let dragStartZoomStart = null;
+let dragStartZoomEnd = null;
+let wasDragged = false;
 
 initializeEntryForm();
 initializeUsers();
@@ -20,6 +31,13 @@ document.addEventListener("click", handleDocumentClick);
 document.addEventListener("keydown", handleDocumentKeydown);
 tooltip.addEventListener("click", handleTooltipClick);
 userSelect.addEventListener("change", handleUserChange);
+document.getElementById("zoom-in").addEventListener("click", applyZoomIn);
+document.getElementById("zoom-out").addEventListener("click", applyZoomOut);
+chart.addEventListener("wheel", handleChartWheel, { passive: true });
+chart.addEventListener("pointerdown", handleChartPointerDown);
+document.addEventListener("pointermove", handleChartPointerMove);
+document.addEventListener("pointerup", handleChartPointerUp);
+document.addEventListener("pointercancel", handleChartPointerUp);
 
 function buildApiUrl(path, query = {}) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -79,6 +97,10 @@ async function loadChartFromApi() {
     if (!response.ok) {
       if (response.status === 404) {
         statusEl.textContent = `No weight records yet for ${formatUserLabel(activeUser)}. Add the first point to create a CSV file.`;
+        allRows = [];
+        allDesiredWeights = [];
+        zoomStart = null;
+        zoomEnd = null;
         renderEmptyState("No data loaded");
         return;
       }
@@ -96,6 +118,10 @@ async function loadChartFromApi() {
 
     if (!points.length) {
       statusEl.textContent = `No weight records yet for ${formatUserLabel(activeUser)}. Add the first point to populate the chart.`;
+      allRows = [];
+      allDesiredWeights = [];
+      zoomStart = null;
+      zoomEnd = null;
       renderEmptyState("No data loaded");
       return;
     }
@@ -104,9 +130,15 @@ async function loadChartFromApi() {
       ? ` ${desiredWeights.length} desired weight line${desiredWeights.length === 1 ? "" : "s"} shown.`
       : "";
     statusEl.textContent = `Loaded ${points.length} records for ${formatUserLabel(activeUser)}.${targetLabel}`;
-    renderChart(points, desiredWeights);
+    allRows = points;
+    allDesiredWeights = desiredWeights;
+    renderZoomedChart();
   } catch (error) {
     statusEl.textContent = `Unable to load API data: ${error.message}`;
+    allRows = [];
+    allDesiredWeights = [];
+    zoomStart = null;
+    zoomEnd = null;
     renderEmptyState("No data loaded");
   }
 }
@@ -212,6 +244,9 @@ function renderChart(points, desiredWeights = []) {
 
   const yTicks = buildTicks(yMin, yMax, 5);
   const xTicks = buildDateTicks(points, 5);
+  const yearStart = points[0].timestamp.getFullYear();
+  const yearEnd = points[points.length - 1].timestamp.getFullYear();
+  const yearLabel = yearStart === yearEnd ? String(yearStart) : `${yearStart}–${yearEnd}`;
   const desiredLines = desiredWeights.map((value, index) => ({
     value,
     y: scaleY(value),
@@ -234,7 +269,7 @@ function renderChart(points, desiredWeights = []) {
     `).join("")}
     <line x1="${MARGIN.left}" y1="${HEIGHT - MARGIN.bottom}" x2="${WIDTH - MARGIN.right}" y2="${HEIGHT - MARGIN.bottom}" stroke="var(--text)" stroke-width="1.5"></line>
     <line x1="${MARGIN.left}" y1="${MARGIN.top}" x2="${MARGIN.left}" y2="${HEIGHT - MARGIN.bottom}" stroke="var(--text)" stroke-width="1.5"></line>
-    <text x="${WIDTH / 2}" y="${HEIGHT - 16}" text-anchor="middle" fill="var(--muted)" font-size="15">Date</text>
+    <text x="${WIDTH - MARGIN.right}" y="20" text-anchor="end" fill="var(--muted)" font-size="15">${yearLabel}</text>
     <text x="22" y="${HEIGHT / 2}" text-anchor="middle" fill="var(--muted)" font-size="15" transform="rotate(-90 22 ${HEIGHT / 2})">Weight (kg)</text>
     ${desiredLines.map((line) => `
       <g>
@@ -292,18 +327,152 @@ function renderEmptyState(message) {
     <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="transparent"></rect>
     <text x="${WIDTH / 2}" y="${HEIGHT / 2}" text-anchor="middle" fill="var(--muted)" font-size="24">${message}</text>
   `;
+  chart.style.cursor = "";
   hideTooltip();
+  updateZoomButtons();
+}
+
+function renderZoomedChart() {
+  if (!allRows.length) return;
+  let visible = allRows;
+  if (zoomStart !== null && zoomEnd !== null) {
+    visible = allRows.filter(
+      (r) => r.timestamp.getTime() >= zoomStart && r.timestamp.getTime() <= zoomEnd
+    );
+  }
+  if (visible.length < 2) {
+    visible = allRows;
+    zoomStart = null;
+    zoomEnd = null;
+  }
+  chart.style.cursor = zoomStart !== null ? "grab" : "";
+  updateZoomButtons();
+  renderChart(visible, allDesiredWeights);
+}
+
+function updateZoomButtons() {
+  const zoomInBtn = document.getElementById("zoom-in");
+  const zoomOutBtn = document.getElementById("zoom-out");
+  if (!zoomInBtn || !zoomOutBtn) return;
+  const noData = allRows.length < 2;
+  zoomOutBtn.disabled = noData || (zoomStart === null && zoomEnd === null);
+  if (noData) { zoomInBtn.disabled = true; return; }
+  const currentStart = zoomStart ?? allRows[0].timestamp.getTime();
+  const currentEnd = zoomEnd ?? allRows[allRows.length - 1].timestamp.getTime();
+  const span = currentEnd - currentStart;
+  const nextStart = currentStart + span * ZOOM_FACTOR;
+  const nextVisible = allRows.filter(
+    (r) => r.timestamp.getTime() >= nextStart && r.timestamp.getTime() <= currentEnd
+  );
+  zoomInBtn.disabled = nextVisible.length < 2;
+}
+
+function applyZoomIn() {
+  if (allRows.length < 2) return;
+  const currentStart = zoomStart ?? allRows[0].timestamp.getTime();
+  const currentEnd = zoomEnd ?? allRows[allRows.length - 1].timestamp.getTime();
+  const span = currentEnd - currentStart;
+  const newStart = currentStart + span * ZOOM_FACTOR;
+  const wouldBeVisible = allRows.filter(
+    (r) => r.timestamp.getTime() >= newStart && r.timestamp.getTime() <= currentEnd
+  );
+  if (wouldBeVisible.length < 2) return;
+  zoomStart = newStart;
+  zoomEnd = currentEnd;
+  renderZoomedChart();
+}
+
+function applyZoomOut() {
+  if (allRows.length < 2 || (zoomStart === null && zoomEnd === null)) return;
+  const dataStart = allRows[0].timestamp.getTime();
+  const dataEnd = allRows[allRows.length - 1].timestamp.getTime();
+  const span = zoomEnd - zoomStart;
+  const newStart = Math.max(zoomEnd - span / (1 - ZOOM_FACTOR), dataStart);
+  if (newStart <= dataStart && zoomEnd >= dataEnd) {
+    zoomStart = null;
+    zoomEnd = null;
+  } else {
+    zoomStart = newStart;
+    // zoomEnd stays fixed
+  }
+  renderZoomedChart();
+}
+
+function applyPanDelta(deltaMs) {
+  if (allRows.length < 2 || zoomStart === null) return;
+  const dataStart = allRows[0].timestamp.getTime();
+  const dataEnd = allRows[allRows.length - 1].timestamp.getTime();
+  let newStart = zoomStart + deltaMs;
+  let newEnd = zoomEnd + deltaMs;
+  if (newStart < dataStart) { newEnd += dataStart - newStart; newStart = dataStart; }
+  if (newEnd > dataEnd) { newStart -= newEnd - dataEnd; newEnd = dataEnd; }
+  zoomStart = newStart;
+  zoomEnd = newEnd;
+  renderZoomedChart();
+}
+
+function handleChartWheel(e) {
+  const innerWidth = WIDTH - MARGIN.left - MARGIN.right;
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    const bounds = chart.getBoundingClientRect();
+    const timeSpan = (zoomEnd ?? allRows[allRows.length - 1]?.timestamp.getTime() ?? 0) -
+                     (zoomStart ?? allRows[0]?.timestamp.getTime() ?? 0);
+    const actualInnerWidth = bounds.width * (innerWidth / WIDTH);
+    applyPanDelta((e.deltaX / actualInnerWidth) * timeSpan);
+  } else if (e.deltaY < 0) {
+    applyZoomIn();
+  } else if (e.deltaY > 0) {
+    applyZoomOut();
+  }
+}
+
+function handleChartPointerDown(e) {
+  if (zoomStart === null || e.button !== 0) return;
+  dragStartX = e.clientX;
+  dragStartZoomStart = zoomStart;
+  dragStartZoomEnd = zoomEnd;
+  wasDragged = false;
+  chart.setPointerCapture(e.pointerId);
+  chart.style.cursor = "grabbing";
+}
+
+function handleChartPointerMove(e) {
+  if (dragStartX === null) return;
+  if (Math.abs(e.clientX - dragStartX) > 4) wasDragged = true;
+  if (!wasDragged) return;
+  const innerWidth = WIDTH - MARGIN.left - MARGIN.right;
+  const bounds = chart.getBoundingClientRect();
+  const svgPxPerActualPx = WIDTH / bounds.width;
+  const dragDeltaSvgPx = (e.clientX - dragStartX) * svgPxPerActualPx;
+  const timeSpan = dragStartZoomEnd - dragStartZoomStart;
+  const msDelta = -(dragDeltaSvgPx / innerWidth) * timeSpan;
+  const dataStart = allRows[0].timestamp.getTime();
+  const dataEnd = allRows[allRows.length - 1].timestamp.getTime();
+  let newStart = dragStartZoomStart + msDelta;
+  let newEnd = dragStartZoomEnd + msDelta;
+  if (newStart < dataStart) { newEnd += dataStart - newStart; newStart = dataStart; }
+  if (newEnd > dataEnd) { newStart -= newEnd - dataEnd; newEnd = dataEnd; }
+  zoomStart = newStart;
+  zoomEnd = newEnd;
+  renderZoomedChart();
+  chart.style.cursor = "grabbing";
+}
+
+function handleChartPointerUp() {
+  if (dragStartX === null) return;
+  dragStartX = null;
+  dragStartZoomStart = null;
+  dragStartZoomEnd = null;
+  chart.style.cursor = zoomStart !== null ? "grab" : "";
 }
 
 function showTooltip(event) {
   const target = event.currentTarget || event.target;
+  const [y, m, d] = target.dataset.date.split("-");
   tooltip.innerHTML = `
-    <strong>${target.dataset.weight} kg</strong>
-    <span>${target.dataset.date}</span>
-    <span>${target.dataset.time}</span>
-    <button class="tooltip__button" type="button" data-action="delete-point" data-id="${target.dataset.id}">
-      Delete point
-    </button>
+    <span class="tooltip__date">${d}.${m}.${y}</span>
+    <strong class="tooltip__value">${target.dataset.weight} kg</strong>
+    <button class="tooltip__delete" type="button" data-action="delete-point" data-id="${target.dataset.id}">Delete</button>
   `;
   tooltip.hidden = false;
   positionTooltip(target);
@@ -327,6 +496,7 @@ function hideTooltip() {
 }
 
 function handlePointClick(event) {
+  if (wasDragged) { wasDragged = false; return; }
   event.stopPropagation();
   showTooltip(event);
 }
@@ -360,20 +530,16 @@ function handleDocumentKeydown(event) {
 
 async function handleTooltipClick(event) {
   const button = event.target.closest('[data-action="delete-point"]');
-  if (!button) {
-    return;
-  }
+  if (!button) return;
 
   const { id } = button.dataset;
-  const weight = tooltip.querySelector("strong")?.textContent || "this point";
-  const date = tooltip.querySelector("span")?.textContent || "";
+  const weight = tooltip.querySelector(".tooltip__value")?.textContent || "this point";
+  const date = tooltip.querySelector(".tooltip__date")?.textContent || "";
 
-  if (!window.confirm(`Delete ${weight} from ${date}?`)) {
-    return;
-  }
+  if (!window.confirm(`Delete ${weight} from ${date}?`)) return;
 
   button.disabled = true;
-  button.textContent = "Deleting...";
+  button.textContent = "Deleting…";
   statusEl.textContent = "Deleting weight entry...";
 
   try {
@@ -383,7 +549,6 @@ async function handleTooltipClick(event) {
       const errorPayload = await response.json().catch(() => ({}));
       throw new Error(errorPayload.detail || `HTTP ${response.status}`);
     }
-
     const payload = await response.json();
     hideTooltip();
     await loadChartFromApi();
@@ -391,7 +556,7 @@ async function handleTooltipClick(event) {
   } catch (error) {
     statusEl.textContent = `Unable to delete weight: ${error.message}`;
     button.disabled = false;
-    button.textContent = "Delete point";
+    button.textContent = "Delete";
   }
 }
 
@@ -411,11 +576,8 @@ function buildTicks(min, max, count) {
 }
 
 function buildDateTicks(points, count) {
-  const formatter = new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  const fmt = (d) =>
+    `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
 
   const ticks = [];
   const lastIndex = points.length - 1;
@@ -423,18 +585,12 @@ function buildDateTicks(points, count) {
 
   for (let i = 0; i <= lastIndex; i += step) {
     const point = points[i];
-    ticks.push({
-      x: point.x,
-      label: formatter.format(point.timestamp),
-    });
+    ticks.push({ x: point.x, label: fmt(point.timestamp) });
   }
 
   const lastPoint = points[lastIndex];
   if (!ticks.length || ticks[ticks.length - 1].x !== lastPoint.x) {
-    ticks.push({
-      x: lastPoint.x,
-      label: formatter.format(lastPoint.timestamp),
-    });
+    ticks.push({ x: lastPoint.x, label: fmt(lastPoint.timestamp) });
   }
 
   return ticks;
@@ -480,6 +636,8 @@ function renderUserOptions(users) {
 async function handleUserChange() {
   setActiveUser(userSelect.value);
   hideTooltip();
+  zoomStart = null;
+  zoomEnd = null;
   await loadChartFromApi();
 }
 

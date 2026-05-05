@@ -180,43 +180,77 @@ h1 {
 
 .tooltip {
   position: absolute;
-  min-width: 160px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(48, 38, 29, 0.94);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(48, 38, 29, 0.9);
   color: #fffdf8;
-  transform: translate(-50%, calc(-100% - 12px));
-  box-shadow: 0 10px 25px rgba(48, 38, 29, 0.24);
-  font-size: 0.95rem;
+  transform: translate(-50%, calc(-100% - 10px));
+  box-shadow: 0 4px 12px rgba(48, 38, 29, 0.2);
+  white-space: nowrap;
   z-index: 1;
 }
 
-.tooltip strong,
-.tooltip span {
+.tooltip__date {
   display: block;
+  font-size: 0.78rem;
+  color: rgba(255, 253, 248, 0.65);
 }
 
-.tooltip__button {
-  margin-top: 10px;
+.tooltip__value {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tooltip__delete {
+  display: block;
+  margin-top: 5px;
   width: 100%;
-  padding: 9px 12px;
-  border: 1px solid rgba(255, 253, 248, 0.24);
-  border-radius: 999px;
-  background: rgba(255, 253, 248, 0.12);
-  color: #fffdf8;
+  padding: 3px 0;
+  border: none;
+  border-top: 1px solid rgba(255, 253, 248, 0.15);
+  background: none;
+  color: rgba(255, 253, 248, 0.55);
   font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.tooltip__delete:hover:not(:disabled) {
+  color: #fffdf8;
+}
+
+.tooltip__delete:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.chart-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fffdf9;
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
 }
 
-.tooltip__button:hover,
-.tooltip__button:focus-visible {
-  background: rgba(255, 253, 248, 0.2);
-  outline: none;
+.chart-btn:hover:not(:disabled) {
+  background: var(--grid);
 }
 
-.tooltip__button:disabled {
-  opacity: 0.72;
-  cursor: wait;
+.chart-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 @media (max-width: 720px) {

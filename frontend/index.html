@@ -39,6 +39,10 @@
       </form>
       <div id="status" class="status">Loading records...</div>
       <div class="chart-card">
+        <div class="chart-controls">
+          <button id="zoom-out" class="chart-btn" type="button" aria-label="Zoom out" disabled>−</button>
+          <button id="zoom-in"  class="chart-btn" type="button" aria-label="Zoom in">+</button>
+        </div>
         <svg id="chart" class="chart" viewBox="0 0 960 520" role="img" aria-label="Line chart of weight by date"></svg>
         <div id="tooltip" class="tooltip" hidden></div>
       </div>
