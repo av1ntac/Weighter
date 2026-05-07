@@ -253,6 +253,13 @@ function renderChart(points, desiredWeights = []) {
     labelY: Math.max(MARGIN.top + 16, scaleY(value) - 8 + index * 0.01),
   }));
 
+  const { slope, intercept } = linearRegression(points);
+  const clampY = (y) => Math.max(MARGIN.top, Math.min(MARGIN.top + innerHeight, y));
+  const regLine = {
+    x1: scaleX(xMin), y1: clampY(scaleY(slope * xMin + intercept)),
+    x2: scaleX(xMax), y2: clampY(scaleY(slope * xMax + intercept)),
+  };
+
   chart.innerHTML = `
     <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="transparent"></rect>
     ${yTicks.map((tick) => `
@@ -292,6 +299,15 @@ function renderChart(points, desiredWeights = []) {
       </g>
     `).join("")}
     <path d="${pathData}" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path>
+    <line
+      x1="${regLine.x1}" y1="${regLine.y1}"
+      x2="${regLine.x2}" y2="${regLine.y2}"
+      stroke="var(--regression)"
+      stroke-width="1.5"
+      stroke-dasharray="6 3"
+      opacity="0.75"
+      pointer-events="none"
+    ></line>
     ${points.map((point) => `
       <circle
         class="data-point"
@@ -558,6 +574,20 @@ async function handleTooltipClick(event) {
     button.disabled = false;
     button.textContent = "Delete";
   }
+}
+
+function linearRegression(points) {
+  const n = points.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (const p of points) {
+    const x = p.timestamp.getTime();
+    sumX += x; sumY += p.weight;
+    sumXY += x * p.weight; sumX2 += x * x;
+  }
+  const denom = n * sumX2 - sumX * sumX;
+  const slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
 }
 
 function buildTicks(min, max, count) {

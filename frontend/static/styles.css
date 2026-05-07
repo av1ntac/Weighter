@@ -8,6 +8,7 @@
   --target: #2d7a63;
   --grid: #e7ddcf;
   --shadow: 0 20px 60px rgba(48, 38, 29, 0.08);
+  --regression: #6366f1;
 }
 
 * {
