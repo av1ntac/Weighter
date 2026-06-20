@@ -132,6 +132,11 @@ async function loadChartFromApi() {
     statusEl.textContent = `Loaded ${points.length} records for ${formatUserLabel(activeUser)}.${targetLabel}`;
     allRows = points;
     allDesiredWeights = desiredWeights;
+    if (zoomStart === null && zoomEnd === null && allRows.length > 0) {
+      const last = allRows[allRows.length - 1].timestamp.getTime();
+      zoomStart = last - 30 * 24 * 60 * 60 * 1000;
+      zoomEnd = last;
+    }
     renderZoomedChart();
   } catch (error) {
     statusEl.textContent = `Unable to load API data: ${error.message}`;
